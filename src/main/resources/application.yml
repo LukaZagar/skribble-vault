@@ -1,0 +1,7 @@
+spring.application.name: my-application
+spring.cloud.vault:
+  host: localhost
+  port: 8200
+  scheme: https
+  authentication: TOKEN
+  token: root-token-demo
