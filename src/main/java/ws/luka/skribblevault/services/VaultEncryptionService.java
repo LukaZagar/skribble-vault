@@ -1,5 +1,6 @@
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+package ws.luka.skribblevault.services;
+
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -7,16 +8,16 @@ import reactor.core.publisher.Mono;
 
 import java.util.Base64;
 
+@Slf4j
 @Service
 public class VaultEncryptionService {
 
-    private static final Logger logger = LoggerFactory.getLogger(VaultEncryptionService.class);
     private final WebClient webClient;
 
-    @Value("${vault.url}")
+    @Value("${spring.cloud.vault.host}")
     private String vaultUrl;
 
-    @Value("${vault.token}")
+    @Value("${spring.cloud.vault.token}")
     private String vaultToken;
 
     public VaultEncryptionService(WebClient.Builder webClientBuilder) {
@@ -30,7 +31,7 @@ public class VaultEncryptionService {
         return sendEncryptionRequest(requestBody, keyName)
                 .retry(3) // Retrying 3 times in case of error
                 .onErrorResume(e -> {
-                    logger.error("Error during encryption: {}", e.getMessage());
+                    log.error("Error during encryption: {}", e.getMessage());
                     return Mono.error(new RuntimeException("Encryption failed", e));
                 });
     }

@@ -11,3 +11,14 @@ services:
     cap_add:
       - IPC_LOCK
     restart: unless-stopped
+  mongodb:
+    image: mongo:7.0.4-rc0-jammy
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=mongodb
+      - MONGO_INITDB_ROOT_PASSWORD=changeme
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongodb:/data/db
+volumes:
+    mongodb:
