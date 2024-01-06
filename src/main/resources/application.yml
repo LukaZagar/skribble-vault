@@ -1,7 +1,14 @@
-spring.application.name: my-application
+spring.application.name: skribble-encrypter
 spring.cloud.vault:
   host: localhost
   port: 8200
-  scheme: https
+  scheme: http
   authentication: TOKEN
-  token: root-token-demo
+  token: password
+spring:
+  codec:
+    max-in-memory-size: 524288
+  servlet:
+    multipart:
+      max-file-size: 15MB  # Set your desired maximum file size here
+      max-request-size: 20MB  # Set your desired maximum request size here
