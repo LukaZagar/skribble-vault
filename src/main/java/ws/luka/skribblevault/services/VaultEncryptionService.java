@@ -5,14 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.DataBufferUtils;
-import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import ws.luka.skribblevault.dto.EncryptDataRequest;
 
-import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -36,33 +34,21 @@ public class VaultEncryptionService {
 
     @PostConstruct
     public void init() {
-        this.webClient = WebClient.builder().baseUrl(String.format("%s://%s:%s", vaultScheme, vaultUrl, vaultPort)).build();
+        this.webClient = WebClient.builder().baseUrl(String.format("%s://%s:%s", vaultScheme, vaultUrl, vaultPort))
+                .build();
     }
 
-    public Mono<String> encryptData(FilePart file, String keyName) {
-        return file.content()
-                .flatMap(this::dataBufferToBase64)
-                .reduce(new StringBuilder(), StringBuilder::append) // Concatenate all base64 encoded strings
-                .map(StringBuilder::toString) // Convert StringBuilder to String
-                .flatMap(encodedData -> {
-                    String requestBody = constructRequestBody(encodedData);
-                    return sendEncryptionRequest(requestBody, keyName);
-                }).retry(3).onErrorResume(e -> {
+    public Mono<String> encryptData(EncryptDataRequest encryptDataRequest, String keyName) {
+        byte[] binaryData = encryptDataRequest.getData().getBytes(StandardCharsets.UTF_8);
+        String encodedString = Base64.getEncoder().encodeToString(binaryData);
+        String requestBody = constructRequestBody(encodedString);
+
+        return sendEncryptionRequest(requestBody, keyName)
+                .retry(3)
+                .onErrorResume(e -> {
                     log.error("Error during encryption: {}", e.getMessage());
                     return Mono.error(new RuntimeException("Encryption failed", e));
                 });
-    }
-
-    private Mono<String> dataBufferToBase64(DataBuffer dataBuffer) {
-        try {
-            ByteBuffer byteBuffer = dataBuffer.asByteBuffer();
-            byte[] byteArray = new byte[byteBuffer.remaining()];
-            byteBuffer.get(byteArray);
-            String encoded = Base64.getEncoder().encodeToString(byteArray);
-            return Mono.just(encoded);
-        } finally {
-            DataBufferUtils.release(dataBuffer);
-        }
     }
 
     private String constructRequestBody(String encodedData) {
