@@ -38,12 +38,14 @@ public class VaultEncryptionService {
                 .build();
     }
 
-    public Mono<String> encryptData(EncryptDataRequest encryptDataRequest, String keyName) {
-        byte[] binaryData = encryptDataRequest.getData().getBytes(StandardCharsets.UTF_8);
-        String encodedString = Base64.getEncoder().encodeToString(binaryData);
-        String requestBody = constructRequestBody(encodedString);
+    // TODO Handle if the user uploads a AES256 key.
+    // TODO Handle if a user uploads just a byte array
 
-        return sendEncryptionRequest(requestBody, keyName)
+    public Mono<String> encryptData(EncryptDataRequest encryptDataRequest, String keyName) {
+        return getBytesFromString(encryptDataRequest.getData())
+                .flatMap(this::encodeBase64Bytes)
+                .flatMap(this::constructRequestBody)
+                .flatMap(requestBody -> sendEncryptionRequest(requestBody, keyName))
                 .retry(3)
                 .onErrorResume(e -> {
                     log.error("Error during encryption: {}", e.getMessage());
@@ -51,17 +53,24 @@ public class VaultEncryptionService {
                 });
     }
 
-    private String constructRequestBody(String encodedData) {
-        ObjectMapper objectMapper = new ObjectMapper();
-        Map<String, String> body = new HashMap<>();
-        body.put("plaintext", encodedData);
+    private Mono<byte[]> getBytesFromString(String input) {
+        return Mono.just(input.getBytes(StandardCharsets.UTF_8));
+    }
 
-        try {
+    private Mono<String> encodeBase64Bytes(byte[] inputData) {
+        return Mono.just(Base64.getEncoder().encodeToString(inputData));
+    }
+
+    private Mono<String> constructRequestBody(String encodedData) {
+        return Mono.fromCallable(() -> {
+            ObjectMapper objectMapper = new ObjectMapper();
+            Map<String, String> body = new HashMap<>();
+            body.put("plaintext", encodedData);
             return objectMapper.writeValueAsString(body);
-        } catch (JsonProcessingException e) {
+        }).onErrorMap(JsonProcessingException.class, e -> {
             log.error("Error creating JSON body", e);
-            throw new RuntimeException("Error creating JSON body", e);
-        }
+            return new RuntimeException("Error creating JSON body", e);
+        });
     }
 
     private Mono<String> sendEncryptionRequest(String requestBody, String keyName) {
