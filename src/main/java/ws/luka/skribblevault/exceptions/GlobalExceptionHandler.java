@@ -15,7 +15,7 @@ public class GlobalExceptionHandler {
         if (e instanceof EncryptionDataSizeExceededException) {
             errorResponse = new ClientErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST);
         } else if (Exceptions.isRetryExhausted(e)) {
-            errorResponse = new ClientErrorResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+            errorResponse = new ClientErrorResponse(e.getCause().getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         } else {
             errorResponse = new ClientErrorResponse("An internal error occurred.", HttpStatus.INTERNAL_SERVER_ERROR);
         }
@@ -23,5 +23,4 @@ public class GlobalExceptionHandler {
         log.error("An error occurred during a encryption request {}", e.getMessage());
         return ResponseEntity.status(errorResponse.getStatusCode()).body(errorResponse);
     }
-
 }

@@ -1,7 +1,9 @@
 package ws.luka.skribblevault.dto.request;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 import reactor.core.publisher.Mono;
 
@@ -13,6 +15,8 @@ import java.nio.charset.StandardCharsets;
 @Data
 @Getter
 @Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class ClientEncryptStringRequest implements ClientEncryptionRequest {
     private String data;
 
