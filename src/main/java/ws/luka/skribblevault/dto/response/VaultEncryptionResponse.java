@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class VaultEncryptionResponse {
+public class VaultEncryptionResponse implements ClientResponse {
     private String request_id;
     private String lease_id;
     private boolean renewable;
@@ -18,6 +18,8 @@ public class VaultEncryptionResponse {
     private Object wrap_info;
     private Object warnings;
     private Object auth;
+    private String message;
+    private Integer statusCode;
 
 
     @lombok.Data
