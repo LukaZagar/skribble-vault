@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import ws.luka.skribblevault.dto.EncryptDataRequest;
+import ws.luka.skribblevault.dto.request.ClientEncryptStringRequest;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class VaultEncryptionServiceTest {
@@ -14,7 +14,7 @@ public class VaultEncryptionServiceTest {
 
     @Test
     public void testEncryptData_Success() {
-        EncryptDataRequest request = new EncryptDataRequest();
+        ClientEncryptStringRequest request = new ClientEncryptStringRequest();
         request.setData("TestData");
 
         webTestClient.post().uri("/api/encrypt")

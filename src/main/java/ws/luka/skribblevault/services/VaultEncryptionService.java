@@ -1,24 +1,28 @@
 package ws.luka.skribblevault.services;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.support.WebClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 import reactor.core.publisher.Mono;
-import ws.luka.skribblevault.dto.EncryptDataRequest;
+import ws.luka.skribblevault.controllers.VaultTransitClient;
+import ws.luka.skribblevault.dto.request.ClientEncryptionRequest;
+import ws.luka.skribblevault.dto.request.TransitEncryptDataRequest;
+import ws.luka.skribblevault.dto.request.TransitEncryptionRequest;
+import ws.luka.skribblevault.dto.response.VaultEncryptionResponse;
+import ws.luka.skribblevault.exceptions.EncryptionDataSizeExceededException;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.HashMap;
-import java.util.Map;
 
 @Slf4j
 @Service
 public class VaultEncryptionService {
     private WebClient webClient;
+    private VaultTransitClient vaultServiceProxy;
+
 
     @Value("${spring.cloud.vault.host}")
     private String vaultUrl;
@@ -34,52 +38,51 @@ public class VaultEncryptionService {
 
     @PostConstruct
     public void init() {
-        this.webClient = WebClient.builder().baseUrl(String.format("%s://%s:%s", vaultScheme, vaultUrl, vaultPort))
+        this.webClient = WebClient.builder()
+                .baseUrl(String.format("%s://%s:%s", vaultScheme, vaultUrl, vaultPort))
+                .defaultHeader("X-Vault-Token", vaultToken)
+                .defaultHeader("Content-Type", "application/json")
                 .build();
+
+        HttpServiceProxyFactory proxyFactory = HttpServiceProxyFactory
+                .builderFor(WebClientAdapter.create(webClient))
+                .build();
+
+        this.vaultServiceProxy = proxyFactory.createClient(VaultTransitClient.class);
     }
 
-    // TODO Handle if the user uploads a AES256 key.
-    // TODO Handle if a user uploads just a byte array
-
-    public Mono<String> encryptData(EncryptDataRequest encryptDataRequest, String keyName) {
-        return getBytesFromString(encryptDataRequest.getData())
+    public Mono<VaultEncryptionResponse> encryptData(ClientEncryptionRequest clientEncryptionRequest, String keyName) {
+        return clientEncryptionRequest.getByteStream()
+                .filter(bytes -> bytes.length <= 16) // Remove if it's above 16 bytes as per requirements
+                .switchIfEmpty(Mono.error(new EncryptionDataSizeExceededException()))
                 .flatMap(this::encodeBase64Bytes)
                 .flatMap(this::constructRequestBody)
                 .flatMap(requestBody -> sendEncryptionRequest(requestBody, keyName))
-                .retry(3)
+                .onErrorResume(EncryptionDataSizeExceededException.class, e -> {
+                    // Since I am not allowed to use Spring annotations / ControllerAdvice for error handling
+                    //  just log the error and tell the client what the problem was.
+                    // TODO simple error wrapper response entity thing ?
+                    log.error("Error during encryption, data exceeded allowed limit: {}", e.getMessage());
+                    return Mono.error(new RuntimeException("Encryption failed", e));
+                })
                 .onErrorResume(e -> {
                     log.error("Error during encryption: {}", e.getMessage());
                     return Mono.error(new RuntimeException("Encryption failed", e));
-                });
-    }
-
-    private Mono<byte[]> getBytesFromString(String input) {
-        return Mono.just(input.getBytes(StandardCharsets.UTF_8));
+                })
+                .retry(3);
     }
 
     private Mono<String> encodeBase64Bytes(byte[] inputData) {
         return Mono.just(Base64.getEncoder().encodeToString(inputData));
     }
 
-    private Mono<String> constructRequestBody(String encodedData) {
-        return Mono.fromCallable(() -> {
-            ObjectMapper objectMapper = new ObjectMapper();
-            Map<String, String> body = new HashMap<>();
-            body.put("plaintext", encodedData);
-            return objectMapper.writeValueAsString(body);
-        }).onErrorMap(JsonProcessingException.class, e -> {
-            log.error("Error creating JSON body", e);
-            return new RuntimeException("Error creating JSON body", e);
-        });
+    private Mono<TransitEncryptDataRequest> constructRequestBody(String encodedData) {
+        return Mono.just(new TransitEncryptDataRequest())
+                .doOnNext(request -> request.setPlainText(encodedData));
     }
 
-    private Mono<String> sendEncryptionRequest(String requestBody, String keyName) {
-        return webClient.post()
-                .uri("/v1/transit/encrypt/" + keyName)
-                .header("X-Vault-Token", vaultToken)
-                .header("Content-Type", "application/json")
-                .bodyValue(requestBody)
-                .retrieve()
-                .bodyToMono(String.class);
+    private Mono<VaultEncryptionResponse> sendEncryptionRequest(TransitEncryptionRequest requestBody, String keyName) {
+        return vaultServiceProxy.encrypt(requestBody, keyName)
+                .cast(VaultEncryptionResponse.class);
     }
 }
