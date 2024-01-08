@@ -1,28 +1,27 @@
 package ws.luka.skribblevault.exceptions;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.Exceptions;
 import ws.luka.skribblevault.dto.response.ClientErrorResponse;
 import ws.luka.skribblevault.dto.response.ClientResponse;
 
+@Slf4j
 public class GlobalExceptionHandler {
     public static ResponseEntity<ClientResponse> handleEncryptionException(Throwable e) {
         ClientResponse errorResponse;
-        HttpStatus status;
 
         if (e instanceof EncryptionDataSizeExceededException) {
-            errorResponse = new ClientErrorResponse("Data too big", HttpStatus.BAD_REQUEST.value());
-            status = HttpStatus.BAD_REQUEST;
-        } else if (e instanceof WebClientResponseException.NotFound) {
-            errorResponse = new ClientErrorResponse("HashiCorp Vault Transit engine is not online.", HttpStatus.NOT_FOUND.value());
-            status = HttpStatus.NOT_FOUND;
+            errorResponse = new ClientErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST);
+        } else if (Exceptions.isRetryExhausted(e)) {
+            errorResponse = new ClientErrorResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         } else {
-            errorResponse = new ClientErrorResponse("An internal error occurred.", HttpStatus.INTERNAL_SERVER_ERROR.value());
-            status = HttpStatus.INTERNAL_SERVER_ERROR;
+            errorResponse = new ClientErrorResponse("An internal error occurred.", HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
-        return ResponseEntity.status(status).body(errorResponse);
+        log.error("An error occurred during a encryption request {}", e.getMessage());
+        return ResponseEntity.status(errorResponse.getStatusCode()).body(errorResponse);
     }
 
 }

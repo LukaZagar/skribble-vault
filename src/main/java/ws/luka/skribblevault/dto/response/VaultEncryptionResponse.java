@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.http.HttpStatus;
 
 @Data
 @Getter
@@ -19,7 +20,7 @@ public class VaultEncryptionResponse implements ClientResponse {
     private Object warnings;
     private Object auth;
     private String message;
-    private Integer statusCode;
+    private HttpStatus statusCode;
 
 
     @lombok.Data
