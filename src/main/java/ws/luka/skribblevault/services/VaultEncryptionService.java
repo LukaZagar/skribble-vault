@@ -3,6 +3,7 @@ package ws.luka.skribblevault.services;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -14,6 +15,7 @@ import ws.luka.skribblevault.controllers.VaultTransitClient;
 import ws.luka.skribblevault.dto.request.ClientEncryptionRequest;
 import ws.luka.skribblevault.dto.request.TransitEncryptDataRequest;
 import ws.luka.skribblevault.dto.request.TransitEncryptionRequest;
+import ws.luka.skribblevault.dto.response.ClientEncryptionResponse;
 import ws.luka.skribblevault.dto.response.ClientResponse;
 import ws.luka.skribblevault.dto.response.VaultEncryptionResponse;
 import ws.luka.skribblevault.exceptions.EncryptionDataSizeExceededException;
@@ -25,9 +27,7 @@ import java.util.Base64;
 @Slf4j
 @Service
 public class VaultEncryptionService implements CommandService {
-    private WebClient webClient;
     private VaultTransitClient vaultServiceProxy;
-
 
     @Value("${spring.cloud.vault.host}")
     private String vaultUrl;
@@ -43,7 +43,7 @@ public class VaultEncryptionService implements CommandService {
 
     @PostConstruct
     public void init() {
-        this.webClient = WebClient.builder()
+        WebClient webClient = WebClient.builder()
                 .baseUrl(String.format("%s://%s:%s", vaultScheme, vaultUrl, vaultPort))
                 .defaultHeader("X-Vault-Token", vaultToken)
                 .defaultHeader("Content-Type", "application/json")
@@ -56,24 +56,25 @@ public class VaultEncryptionService implements CommandService {
         this.vaultServiceProxy = proxyFactory.createClient(VaultTransitClient.class);
     }
 
-
-    // TODO if this error occurs do not retry 3 times
-
     @Override
     public Mono<ResponseEntity<ClientResponse>> execute(ClientEncryptionRequest clientEncryptionRequest, String keyName) {
         return encryptData(clientEncryptionRequest, keyName)
-                .map(response -> ResponseEntity.ok().body((ClientResponse) response))
-                .onErrorResume(e -> Mono.just(GlobalExceptionHandler.handleEncryptionException(e)));
+                .map(response -> ResponseEntity.ok().body(response));
     }
 
-    public Mono<VaultEncryptionResponse> encryptData(ClientEncryptionRequest clientEncryptionRequest, String keyName) {
+    public Mono<ClientResponse> encryptData(ClientEncryptionRequest clientEncryptionRequest, String keyName) {
         return clientEncryptionRequest.getByteStream()
-                .filter(bytes -> bytes.length <= 16) // Remove if it's above 16 bytes as per requirements
-                .switchIfEmpty(Mono.error(new EncryptionDataSizeExceededException()))
+                .flatMap(this::checkByteSize) // Check if we exceeded 16 bytes
                 .flatMap(this::encodeBase64Bytes)
                 .flatMap(this::constructRequestBody)
                 .flatMap(requestBody -> sendEncryptionRequest(requestBody, keyName))
+                .flatMap(this::toClientEncryptionResponse)
+                .onErrorResume(GlobalExceptionHandler::handleException)
                 .retryWhen(retryPolicy()); // Separate this method since we might want to modify the policy.
+    }
+
+    private Mono<ClientResponse> toClientEncryptionResponse(VaultEncryptionResponse response) {
+        return Mono.just(new ClientEncryptionResponse("Successfully encrypted", HttpStatus.OK, response));
     }
 
     private Retry retryPolicy() {
@@ -81,11 +82,18 @@ public class VaultEncryptionService implements CommandService {
                 .filter(throwable -> !(throwable instanceof EncryptionDataSizeExceededException)); // Exclude exception from retries
     }
 
+    private Mono<byte[]> checkByteSize(byte[] inputBytes) {
+        if (inputBytes.length > 16) {
+            return Mono.error(EncryptionDataSizeExceededException::new);
+        }
+        return Mono.just(inputBytes);
+    }
+
     private Mono<String> encodeBase64Bytes(byte[] inputData) {
         return Mono.just(Base64.getEncoder().encodeToString(inputData));
     }
 
-    private Mono<TransitEncryptDataRequest> constructRequestBody(String encodedData) {
+    private Mono<? extends TransitEncryptionRequest> constructRequestBody(String encodedData) {
         return Mono.just(new TransitEncryptDataRequest())
                 .doOnNext(request -> request.setPlainText(encodedData));
     }

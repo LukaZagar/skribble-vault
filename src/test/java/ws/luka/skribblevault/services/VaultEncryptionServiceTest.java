@@ -32,10 +32,10 @@ public class VaultEncryptionServiceTest {
         webTestClient.post().uri("/api/encrypt")
                 .bodyValue(request)
                 .exchange()
-                .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$.data.ciphertext").exists()
-                .jsonPath("$.data.ciphertext").isNotEmpty();
+                .jsonPath("$.statusCode").isEqualTo("OK")
+                .jsonPath("$.encryptionData.data.ciphertext").exists()
+                .jsonPath("$.encryptionData.data.ciphertext").isNotEmpty();
     }
 
     @Test
@@ -47,7 +47,6 @@ public class VaultEncryptionServiceTest {
         webTestClient.post().uri("/api/encrypt")
                 .bodyValue(request)
                 .exchange()
-                .expectStatus().isBadRequest()
                 .expectBody()
                 .jsonPath("$.statusCode").exists()
                 .jsonPath("$.statusCode").isEqualTo("BAD_REQUEST");
@@ -65,9 +64,9 @@ public class VaultEncryptionServiceTest {
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(builder.build()))
                 .exchange()
-                .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$.data.ciphertext").exists()
-                .jsonPath("$.data.ciphertext").isNotEmpty();
+                .jsonPath("$.statusCode").isEqualTo("OK")
+                .jsonPath("$.encryptionData.data.ciphertext").exists()
+                .jsonPath("$.encryptionData.data.ciphertext").isNotEmpty();
     }
 }

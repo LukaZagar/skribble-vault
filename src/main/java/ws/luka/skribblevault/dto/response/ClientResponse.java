@@ -8,8 +8,10 @@ import org.springframework.http.HttpStatus;
  */
 public interface ClientResponse {
     String getMessage();
+
     void setMessage(String message);
 
     HttpStatus getStatusCode();
+
     void setStatusCode(HttpStatus statusCode);
 }

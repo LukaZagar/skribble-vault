@@ -5,11 +5,12 @@ import lombok.Data;
 import org.springframework.http.HttpStatus;
 
 /**
- * Dto we send to the user requesting to encrypt a string, to tell them that an error has occured
+ * Dto we send the user, when the encryption is successful and the accompanying data.
  */
 @Data
 @AllArgsConstructor
-public class ClientErrorResponse implements ClientResponse {
+public class ClientEncryptionResponse implements ClientResponse {
     private String message;
     private HttpStatus statusCode;
+    private VaultEncryptionResponse encryptionData;
 }

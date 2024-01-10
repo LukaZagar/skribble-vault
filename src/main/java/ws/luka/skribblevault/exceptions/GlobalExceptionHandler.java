@@ -2,25 +2,39 @@ package ws.luka.skribblevault.exceptions;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import reactor.core.Exceptions;
+import reactor.core.publisher.Mono;
 import ws.luka.skribblevault.dto.response.ClientErrorResponse;
 import ws.luka.skribblevault.dto.response.ClientResponse;
 
 @Slf4j
 public class GlobalExceptionHandler {
-    public static ResponseEntity<ClientResponse> handleEncryptionException(Throwable e) {
-        ClientResponse errorResponse;
 
+    public static Mono<ClientResponse> handleException(Throwable e) {
         if (e instanceof EncryptionDataSizeExceededException) {
-            errorResponse = new ClientErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST);
+            return handleEncryptionDataSizeExceeded(e);
         } else if (Exceptions.isRetryExhausted(e)) {
-            errorResponse = new ClientErrorResponse(e.getCause().getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+            return handleRetryExhausted(e);
         } else {
-            errorResponse = new ClientErrorResponse("An internal error occurred.", HttpStatus.INTERNAL_SERVER_ERROR);
+            return handleGenericException(e);
         }
+    }
 
-        log.error("An error occurred during a encryption request {}", e.getMessage());
-        return ResponseEntity.status(errorResponse.getStatusCode()).body(errorResponse);
+    private static Mono<ClientResponse> handleEncryptionDataSizeExceeded(Throwable e) {
+        log.error("Data size exceeded: {}", e.getMessage());
+        return Mono.just(new ClientErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST));
+    }
+
+    private static Mono<ClientResponse> handleRetryExhausted(Throwable e) {
+        Throwable cause = e.getCause() != null ? e.getCause() : e;
+        // Intentionally send the client just the retry exhausted message, we don't want to reveal internal errors
+        //  that might expose libraries used, their versions, etc...
+        log.error("Retry exhausted: {}", cause.getMessage());
+        return Mono.just(new ClientErrorResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR));
+    }
+
+    private static Mono<ClientResponse> handleGenericException(Throwable e) {
+        log.error("Generic error: {}", e.getMessage());
+        return Mono.just(new ClientErrorResponse("An internal error occurred.", HttpStatus.INTERNAL_SERVER_ERROR));
     }
 }
